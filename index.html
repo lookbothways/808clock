@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>08:08 Clock</title>
+    
+    <!-- Load Roboto Font (Thin weight for the digital timer) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #fff; /* White Background */
+            color: #000; /* Black Lines/Text */
+            font-family: 'Roboto', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            /* Prevents double-tap zoom on mobile so tapping is seamless */
+            touch-action: manipulation; 
+            cursor: pointer; /* Hints that the screen is interactive */
+        }
+
+        /* Analog Clock Container */
+        .clock {
+            width: 60vmin;
+            height: 60vmin;
+            border: 2px solid #000; /* Thin Black Circle */
+            border-radius: 50%;
+            position: relative;
+            margin-bottom: 2vmin;
+        }
+
+        /* 3-Hour Markers (12, 3, 6, 9) */
+        .marker {
+            position: absolute;
+            background-color: #000;
+        }
+        .marker.top { top: 0; left: 50%; transform: translateX(-50%); width: 2px; height: 3vmin; }
+        .marker.bottom { bottom: 0; left: 50%; transform: translateX(-50%); width: 2px; height: 3vmin; }
+        .marker.left { top: 50%; left: 0; transform: translateY(-50%); width: 3vmin; height: 2px; }
+        .marker.right { top: 50%; right: 0; transform: translateY(-50%); width: 3vmin; height: 2px; }
+
+        /* Clock Hands */
+        .hand-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .hour-hand {
+            position: absolute;
+            bottom: 50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 18vmin;
+            background-color: #000;
+            border-radius: 2px;
+        }
+        
+        .minute-hand {
+            position: absolute;
+            bottom: 50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 26vmin;
+            background-color: #000;
+            border-radius: 1px;
+        }
+
+        .second-hand {
+            position: absolute;
+            bottom: 50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1px;
+            height: 28vmin;
+            background-color: #000;
+        }
+
+        /* Small tail for the second hand extending past the center */
+        .second-hand::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 1px;
+            height: 4vmin;
+            background-color: #000;
+        }
+
+        /* Center Pin */
+        .center-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 10px;
+            height: 10px;
+            background-color: #000;
+            border-radius: 50%;
+            z-index: 10;
+        }
+
+        /* Digital Timer Container (Exactly as wide as the clock) */
+        .timer-wrapper {
+            width: 60vmin;
+        }
+
+        /* SVG guarantees text perfectly touches the edges of the 60vmin wrapper */
+        .timer-svg {
+            width: 100%;
+            height: auto;
+            display: block;
+            overflow: visible;
+        }
+
+        .timer-text {
+            font-family: 'Roboto', sans-serif;
+            font-weight: 100; /* Thin font */
+            font-variant-numeric: tabular-nums;
+            fill: #000; /* Black Text */
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Analog Clock -->
+    <div class="clock">
+        <div class="marker top"></div>
+        <div class="marker right"></div>
+        <div class="marker bottom"></div>
+        <div class="marker left"></div>
+        
+        <div class="hand-container" id="hourHandContainer">
+            <div class="hour-hand"></div>
+        </div>
+        <div class="hand-container" id="minuteHandContainer">
+            <div class="minute-hand"></div>
+        </div>
+        <div class="hand-container" id="secondHandContainer">
+            <div class="second-hand"></div>
+        </div>
+        
+        <div class="center-dot"></div>
+    </div>
+
+    <!-- Digital Countdown -->
+    <div class="timer-wrapper">
+        <svg viewBox="0 0 100 24" class="timer-svg">
+            <text x="0" y="20" textLength="100" lengthAdjust="spacing" class="timer-text" id="downTimer">00:00:00</text>
+        </svg>
+    </div>
+
+    <script>
+        let isWorking = true;
+        let breakdownTimer;
+
+        // Function to schedule the next random freeze (between 8 and 20 seconds)
+        function scheduleBreakdown() {
+            const randomDelay = Math.floor(Math.random() * 12000) + 8000; 
+            breakdownTimer = setTimeout(() => {
+                isWorking = false;
+            }, randomDelay);
+        }
+
+        // Listen for screen taps/clicks to "jolt" the clock back to life
+        window.addEventListener('pointerdown', () => {
+            if (!isWorking) {
+                isWorking = true;
+                scheduleBreakdown(); // Schedule the next time it breaks
+            }
+        });
+
+        function pad(n) {
+            return n.toString().padStart(2, '0');
+        }
+
+        function updateClock() {
+            // Loop at screen refresh rate
+            requestAnimationFrame(updateClock);
+
+            // If the clock is "broken", skip rendering this frame entirely (freezes hands/timer in place)
+            if (!isWorking) return;
+
+            const now = new Date();
+            
+            // ---------------------------------------------------------
+            // 1. Analog Clock (+232 mins offset from real time)
+            // 08:08 + 232 mins = 12:00 (Midnight directly at the top)
+            // ---------------------------------------------------------
+            const offsetTime = new Date(now.getTime() + 232 * 60000);
+            const h = offsetTime.getHours();
+            const m = offsetTime.getMinutes();
+            const s = offsetTime.getSeconds();
+            const ms = offsetTime.getMilliseconds();
+            
+            // Fractional variables ensure perfectly smooth sweeping hands
+            const smoothS = s + ms / 1000;
+            const smoothM = m + smoothS / 60;
+            const smoothH = (h % 12) + smoothM / 60;
+            
+            const hourDeg = smoothH * 30;   // 360deg / 12h = 30
+            const minuteDeg = smoothM * 6;  // 360deg / 60m = 6
+            const secondDeg = smoothS * 6;  // 360deg / 60s = 6
+            
+            document.getElementById('hourHandContainer').style.transform = `rotate(${hourDeg}deg)`;
+            document.getElementById('minuteHandContainer').style.transform = `rotate(${minuteDeg}deg)`;
+            document.getElementById('secondHandContainer').style.transform = `rotate(${secondDeg}deg)`;
+            
+            // ---------------------------------------------------------
+            // 2. Count-down to 08:08 (Time remaining until next 08:08 IRL)
+            // ---------------------------------------------------------
+            let tTarget = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 8, 0, 0);
+            
+            // If it's already past 08:08 today, target tomorrow's 08:08
+            if (now >= tTarget) {
+                tTarget.setDate(tTarget.getDate() + 1);
+            }
+            
+            let diffDown = tTarget - now;
+            let hDown = Math.floor(diffDown / 3600000);
+            let mDown = Math.floor((diffDown % 3600000) / 60000);
+            let sDown = Math.floor((diffDown % 60000) / 1000);
+            
+            // Render text
+            document.getElementById('downTimer').textContent = `${pad(hDown)}:${pad(mDown)}:${pad(sDown)}`;
+        }
+        
+        // Initialize the cycle
+        scheduleBreakdown();
+        requestAnimationFrame(updateClock);
+    </script>
+</body>
+</html>
